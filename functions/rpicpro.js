@@ -1,199 +1,194 @@
-// https://developers.cloudflare.com/pages/how-to/refactor-a-worker-to-pages-functions/
-export async function onRequest({ request, env }) {
-	return await fetch({ request, env });
-}
-
-async function fetch({ request, env }) {
-    // 检查是否是预检请求（OPTIONS请求），如果是则返回CORS头部
-    if (request.method === 'OPTIONS') {
-        return new Response(null, {
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET', // 允许的HTTP方法
-                'Access-Control-Allow-Headers': '*', // 允许的请求头
-            },
-        });
-    }
-
-    const url = new URL(request.url);
-    // 检查URL中是否包含 "favicon.ico"
-    if (url.pathname.includes("favicon.ico")) {
-        // 如果包含 "favicon.ico"，则返回404响应
-        return new Response('Not Found', {
-            status: 404,
-            statusText: 'Not Found',
-            headers: {
-                'Content-Type': 'text/plain',
-            },
-        });
-    }
-
-    // https://developer.mozilla.org/zh-CN/docs/Web/API/URLSearchParams#%E6%96%B9%E6%B3%95
-    const searchParams = new URLSearchParams(url.search);
-    //return Response.json(env.DEFAULT_TABLES);
-    var tableNamesArray = [];
-    // 获取所有目前存在的表名
-    try{
-        const tableNameRows = await env.PIC_DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name != '_cf_KV' AND name NOT LIKE 'sqlite_%';").all();
-        for (let index = 0; index < tableNameRows.results.length; index++) {
-            const tableNameRow = tableNameRows.results[index];
-            tableNamesArray.push(tableNameRow.name);
+export default {
+    async fetch(request, env, ctx) {
+        // 检查是否是预检请求（OPTIONS请求），如果是则返回CORS头部
+        if (request.method === 'OPTIONS') {
+            return new Response(null, {
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET', // 允许的HTTP方法
+                    'Access-ol-Allow-Headers': '*', // 允许的请求头
+                },
+            });
         }
-    }
-    catch{
-        return new Response('服务器内部错误，这不是你的错。请联系管理员：“你忘了绑定 D1 数据库至参数 PIC_DB ”', {
-            status: 500,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-            },
-        });
-    }
 
-    let isHasTableName = false;
-    const builtSqls = [];
-
-
-    for (let index = 0; index < tableNamesArray.length; index++) {
-        let tableName = tableNamesArray[index];
-        if (searchParams.has(tableName)) {
-            isHasTableName = true;
-            var sqlOrResponse = buildSql(tableName, searchParams.get(tableName), searchParams);
-            if (sqlOrResponse instanceof Response) { // 如果是 Response 类型，说明构建 SQL 失败
-                return sqlOrResponse;
-            }
-            builtSqls.push(sqlOrResponse);
-        } else if (searchParams.has("all")) {
-            isHasTableName = true;
-            var sqlOrResponse = buildSql(tableName, searchParams.get("all"), searchParams);
-            if (sqlOrResponse instanceof Response) { // 如果是 Response 类型，说明构建 SQL 失败
-                return sqlOrResponse;
-            }
-            builtSqls.push(sqlOrResponse);
+        const url = new URL(request.url);
+        // 检查URL中是否包含 "favicon.ico"
+        if (url.pathname.includes("favicon.ico")) {
+            // 如果包含 "favicon.ico"，则返回404响应
+            return new Response('Not Found', {
+                status: 404,
+                statusText: 'Not Found',
+                headers: {
+                    'Content-Type': 'text/plain',
+                },
+            });
         }
-    }
 
-    if (!isHasTableName) {
-        let defaultTableRaw = "";
+        // https://developer.mozilla.org/zh-CN/docs/Web/API/URLSearchParams#%E6%96%B9%E6%B3%95
+        const searchParams = new URLSearchParams(url.search);
+        //return Response.json(env.DEFAULT_TABLES);
+        var tableNamesArray = [];
+        // 获取所有目前存在的表名
         try {
-            defaultTableRaw = env.DEFAULT_TABLES;
+            const tableNameRows = await env.PIC_DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name != '_cf_KV' AND name NOT LIKE 'sqlite_%';").all();
+            for (let index = 0; index < tableNameRows.results.length; index++) {
+                const tableNameRow = tableNameRows.results[index];
+                tableNamesArray.push(tableNameRow.name);
+            }
         }
         catch {
-            return new Response('服务器内部错误，这不是你的错。请联系管理员：“你忘了设置参数 DEFAULT_TABLES ”', {
+            return new Response('服务器内部错误，这不是你的错。请联系管理员：“你忘了绑定 D1 数据库至参数 PIC_DB ”', {
                 status: 500,
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                 },
             });
         }
-        const defaultTables = defaultTableRaw.split(',').map(part => part.trim());
-        defaultTables.forEach((tableName) => {
-            // 构建 SQL 查询语句
-            let sql = "select";
-            sql += (searchParams.has('count')) ? " COUNT(*) AS count" : " `url` ";
-            sql += ` from \`${tableName}\``;
-            builtSqls.push(sql);
-        });
-    }
-    var isEnableDebug = false;
-    try {
-        isEnableDebug = env.ENABLE_DEBUG;
-    }
-    catch (error) {
-        isEnableDebug = false;
-    }
-    if (searchParams.has("debug") && isEnableDebug) {
-        if (isEnableDebug) {
-            return Response.json(builtSqls)
+
+        let isHasTableName = false;
+        const builtSqls = [];
+
+
+        for (let index = 0; index < tableNamesArray.length; index++) {
+            let tableName = tableNamesArray[index];
+            if (searchParams.has(tableName)) {
+                isHasTableName = true;
+                var sqlOrResponse = buildSql(tableName, searchParams.get(tableName), searchParams);
+                if (sqlOrResponse instanceof Response) { // 如果是 Response 类型，说明构建 SQL 失败
+                    return sqlOrResponse;
+                }
+                builtSqls.push(sqlOrResponse);
+            } else if (searchParams.has("all")) {
+                isHasTableName = true;
+                var sqlOrResponse = buildSql(tableName, searchParams.get("all"), searchParams);
+                if (sqlOrResponse instanceof Response) { // 如果是 Response 类型，说明构建 SQL 失败
+                    return sqlOrResponse;
+                }
+                builtSqls.push(sqlOrResponse);
+            }
         }
-        else {
-            return new Response('该 API 的管理员禁止使用 debug 检查 SQL 语句。', {
-                status: 403,
+
+        if (!isHasTableName) {
+            let defaultTableRaw = "";
+            try {
+                defaultTableRaw = env.DEFAULT_TABLES;
+            }
+            catch {
+                return new Response('服务器内部错误，这不是你的错。请联系管理员：“你忘了设置参数 DEFAULT_TABLES ”', {
+                    status: 500,
+                    headers: {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                    },
+                });
+            }
+            const defaultTables = defaultTableRaw.split(',').map(part => part.trim());
+            defaultTables.forEach((tableName) => {
+                // 构建 SQL 查询语句
+                let sql = "select";
+                sql += (searchParams.has('count')) ? " COUNT(*) AS count" : " `url` ";
+                sql += ` from \`${tableName}\``;
+                builtSqls.push(sql);
+            });
+        }
+        var isEnableDebug = false;
+        try {
+            isEnableDebug = env.ENABLE_DEBUG;
+        }
+        catch (error) {
+            isEnableDebug = false;
+        }
+        if (searchParams.has("debug") && isEnableDebug) {
+            if (isEnableDebug) {
+                return Response.json(builtSqls)
+            }
+            else {
+                return new Response('该 API 的管理员禁止使用 debug 检查 SQL 语句。', {
+                    status: 403,
+                    headers: {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                    },
+                });
+            }
+        }
+        var statementsPrepared = [];
+        for (let index = 0; index < builtSqls.length; index++) {
+            const builtSql = builtSqls[index];
+            statementsPrepared.push(env.PIC_DB.prepare(builtSql));
+        }
+        var rowsList
+        try {
+            rowsList = await env.PIC_DB.batch(statementsPrepared);
+        }
+        catch (error) {
+            return new Response('SQL 查询失败。请先检查你的 SQL 是否有误；如果确认无误，请联系管理员。', {
+                status: 400,
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                 },
             });
         }
-    }
-    var statementsPrepared = [];
-    for (let index = 0; index < builtSqls.length; index++) {
-        const builtSql = builtSqls[index];
-        statementsPrepared.push(env.PIC_DB.prepare(builtSql));
-    }
-    var rowsList
-    try {
-        rowsList = await env.PIC_DB.batch(statementsPrepared);
-    }
-    catch (error) {
-        return new Response('SQL 查询失败。请先检查你的 SQL 是否有误；如果确认无误，请联系管理员。', {
-            status: 400,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-            },
-        });
-    }
-    var rowResults = [];
-    rowsList.forEach(rows => {
-        rows.results.forEach(row => {
-            rowResults.push(row);
-        });
-    });
-
-    var isEnableCount = false;
-    try {
-        isEnableCount = env.ENABLE_COUNT;
-    }
-    catch (error) {
-        isEnableCount = false;
-    }
-    if (searchParams.has("count")) {
-        if (isEnableCount) {
-            var count = 0;
-            rowResults.forEach(countRow => {
-                count += countRow.count;
+        var rowResults = [];
+        rowsList.forEach(rows => {
+            rows.results.forEach(row => {
+                rowResults.push(row);
             });
-            return Response.json(count)
+        });
+
+        var isEnableCount = false;
+        try {
+            isEnableCount = env.ENABLE_COUNT;
         }
-        else {
-            return new Response('该 API 的管理员禁止使用 count 查询数量。', {
-                status: 403,
+        catch (error) {
+            isEnableCount = false;
+        }
+        if (searchParams.has("count")) {
+            if (isEnableCount) {
+                var count = 0;
+                rowResults.forEach(countRow => {
+                    count += countRow.count;
+                });
+                return Response.json(count)
+            }
+            else {
+                return new Response('该 API 的管理员禁止使用 count 查询数量。', {
+                    status: 403,
+                    headers: {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                    },
+                });
+            }
+        }
+
+        var allUrls = [];
+        rowResults.forEach(row => {
+            allUrls.push(row.url);
+        });
+
+        var randomImageUrl = "";
+        if (allUrls.length > 0) {
+            // 随机选择一个URL  
+            const randomIndex = Math.floor(Math.random() * allUrls.length);
+            randomImageUrl = allUrls[randomIndex];
+            // 构建一个响应，直接显示随机选择的图片  
+            return (async () => {
+                const response = await fetch(randomImageUrl);
+                const blob = await response.blob();
+                return new Response(blob, {
+                    headers: {
+                        'Content-Type': response.headers.get('content-type'), // 使用原始响应的content-type  
+                    },
+                });
+            })();
+        } else {
+            return new Response('没有找到符合条件的图片。', {
+                status: 404,
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                 },
             });
         }
-    }
-
-    var allUrls = [];
-    rowResults.forEach(row => {
-        allUrls.push(row.url);
-    });
-
-    var randomImageUrl = ""
-    if (allUrls.length > 0) {
-        // 随机选择一个URL
-        const randomIndex = Math.floor(Math.random() * allUrls.length);
-        randomImageUrl = allUrls[randomIndex];
-        // 构建重定向响应，将用户重定向到随机选择的图片URL
-        // 允许跨域，因为 Sakurairo 需要跨域预载多一张图片
-        // 这样下次访问就能直接从缓存中读取，加快封面图加载速度
-        return new Response(null, {
-            status: 302,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET', // 允许的HTTP方法
-                'Access-Control-Allow-Headers': '*', // 允许的请求头
-                'Location': randomImageUrl,
-            },
-        });
-    } else {
-        return new Response('没有找到符合条件的图片。', {
-            status: 404,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-            },
-        });
-    }
-}
+    },
+};
 
 function parseSqlElements(whereTerms) {
     const keyWords = ["(", ")", "or", "and", "not"];
@@ -289,4 +284,3 @@ function buildSql(tableName, whereRaw, searchParams) {
     sql += ` from \`${tableName}\` ${whereCondition}`;
     return sql;
 }
-
