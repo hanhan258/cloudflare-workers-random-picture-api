@@ -164,23 +164,21 @@ export default {
             allUrls.push(row.url);
         });
 
-        var randomImageUrl = ""
+        var randomImageUrl = "";
         if (allUrls.length > 0) {
-            // 随机选择一个URL
+            // 随机选择一个URL  
             const randomIndex = Math.floor(Math.random() * allUrls.length);
             randomImageUrl = allUrls[randomIndex];
-            // 构建重定向响应，将用户重定向到随机选择的图片URL
-            // 允许跨域，因为 Sakurairo 需要跨域预载多一张图片
-            // 这样下次访问就能直接从缓存中读取，加快封面图加载速度
-            return new Response(null, {
-                status: 302,
-                headers: {
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'GET', // 允许的HTTP方法
-                    'Access-Control-Allow-Headers': '*', // 允许的请求头
-                    'Location': randomImageUrl,
-                },
-            });
+            // 构建一个响应，直接显示随机选择的图片  
+            return (async () => {
+                const response = await fetch(randomImageUrl);
+                const blob = await response.blob();
+                return new Response(blob, {
+                    headers: {
+                        'Content-Type': response.headers.get('content-type'), // 使用原始响应的content-type  
+                    },
+                });
+            })();
         } else {
             return new Response('没有找到符合条件的图片。', {
                 status: 404,
